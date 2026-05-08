@@ -1,0 +1,311 @@
+// prisma/schema.prisma
+// prisma/schema.prisma
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+// ─── Auth ───────────────────────────────────────────────────────────────────
+
+model User {
+  id        String   @id @default(cuid())
+  name      String
+  email     String   @unique
+  password  String
+  role      Role     @default(ADMIN)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  stores    Store[]
+  ads       Ad[]
+  customers Customer[]
+  invoices  Invoice[]
+  aiChats   AiChat[]
+}
+
+enum Role {
+  ADMIN
+  MANAGER
+  VIEWER
+}
+
+// ─── Stores ─────────────────────────────────────────────────────────────────
+
+model Store {
+  id            String         @id @default(cuid())
+  name          String
+  platform      Platform
+  apiKey        String?
+  apiSecret     String?
+  webhookUrl    String?
+  isActive      Boolean        @default(true)
+  createdAt     DateTime       @default(now())
+  updatedAt     DateTime       @updatedAt
+  webhookEvents WebhookEvent[]
+
+  userId  String
+  user    User          @relation(fields: [userId], references: [id])
+  orders  Order[]
+  ads     Ad[]
+  metrics StoreMetric[]
+}
+
+enum Platform {
+  SHOPIFY
+  SHOPEE
+  MERCADO_LIVRE
+  AMAZON
+  WOO_COMMERCE
+  NUVEMSHOP
+  OUTROS
+}
+
+model StoreMetric {
+  id        String   @id @default(cuid())
+  storeId   String
+  store     Store    @relation(fields: [storeId], references: [id])
+  date      DateTime @default(now())
+  revenue   Float    @default(0)
+  orders    Int      @default(0)
+  visitors  Int      @default(0)
+  avgTicket Float    @default(0)
+}
+
+// ─── Orders ─────────────────────────────────────────────────────────────────
+
+model Order {
+  id         String      @id @default(cuid())
+  externalId String?
+  storeId    String
+  store      Store       @relation(fields: [storeId], references: [id])
+  customerId String?
+  customer   Customer?   @relation(fields: [customerId], references: [id])
+  status     OrderStatus @default(PENDING)
+  total      Float
+  items      Json
+  createdAt  DateTime    @default(now())
+  updatedAt  DateTime    @updatedAt
+
+  invoice Invoice?
+}
+
+enum OrderStatus {
+  PENDING
+  PAID
+  PROCESSING
+  SHIPPED
+  DELIVERED
+  CANCELLED
+  REFUNDED
+}
+
+// ─── Ads ────────────────────────────────────────────────────────────────────
+
+model Ad {
+  id             String     @id @default(cuid())
+  name           String
+  platform       AdPlatform
+  status         AdStatus   @default(DRAFT)
+  headline       String
+  description    String
+  budget         Float
+  spent          Float      @default(0)
+  revenue        Float      @default(0)
+  impressions    Int        @default(0)
+  clicks         Int        @default(0)
+  conversions    Int        @default(0)
+  imageUrl       String?
+  targetAudience String?
+  externalId     String?
+  startDate      DateTime?
+  endDate        DateTime?
+  createdAt      DateTime   @default(now())
+  updatedAt      DateTime   @updatedAt
+
+  userId  String
+  user    User    @relation(fields: [userId], references: [id])
+  storeId String?
+  store   Store?  @relation(fields: [storeId], references: [id])
+
+  // computed
+  roas Float @default(0)
+  cpc  Float @default(0)
+  ctr  Float @default(0)
+}
+
+enum AdPlatform {
+  META
+  GOOGLE
+  TIKTOK
+  KWAI
+  YOUTUBE
+}
+
+enum AdStatus {
+  DRAFT
+  ACTIVE
+  PAUSED
+  ARCHIVED
+  REVIEWING
+}
+
+// ─── CRM ────────────────────────────────────────────────────────────────────
+
+model Customer {
+  id         String          @id @default(cuid())
+  name       String
+  email      String?
+  phone      String?
+  cpf        String?
+  cnpj       String?
+  segment    CustomerSegment @default(REGULAR)
+  totalSpent Float           @default(0)
+  orderCount Int             @default(0)
+  notes      String?
+  createdAt  DateTime        @default(now())
+  updatedAt  DateTime        @updatedAt
+
+  userId   String
+  user     User      @relation(fields: [userId], references: [id])
+  orders   Order[]
+  invoices Invoice[]
+}
+
+enum CustomerSegment {
+  NEW
+  REGULAR
+  VIP
+  INACTIVE
+}
+
+// ─── Finance ────────────────────────────────────────────────────────────────
+
+model Transaction {
+  id          String          @id @default(cuid())
+  type        TransactionType
+  category    String
+  description String
+  amount      Float
+  date        DateTime        @default(now())
+  createdAt   DateTime        @default(now())
+  updatedAt   DateTime        @updatedAt
+}
+
+enum TransactionType {
+  INCOME
+  EXPENSE
+}
+
+// ─── Invoice (NF-e) ─────────────────────────────────────────────────────────
+
+model Invoice {
+  id           String        @id @default(cuid())
+  number       String        @unique
+  status       InvoiceStatus @default(PENDING)
+  customerName String
+  customerDoc  String
+  description  String
+  cfop         String
+  amount       Float
+  tax          Float         @default(0)
+  nature       String
+  xmlUrl       String?
+  pdfUrl       String?
+  externalId   String?
+  issuedAt     DateTime?
+  createdAt    DateTime      @default(now())
+  updatedAt    DateTime      @updatedAt
+
+  userId     String
+  user       User      @relation(fields: [userId], references: [id])
+  customerId String?
+  customer   Customer? @relation(fields: [customerId], references: [id])
+  orderId    String?   @unique
+  order      Order?    @relation(fields: [orderId], references: [id])
+}
+
+enum InvoiceStatus {
+  DRAFT
+  PENDING
+  AUTHORIZED
+  CANCELLED
+  DENIED
+}
+
+// ─── AI Chats ────────────────────────────────────────────────────────────────
+
+model AiChat {
+  id        String   @id @default(cuid())
+  title     String   @default("Nova conversa")
+  messages  Json     @default("[]")
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  userId String
+  user   User   @relation(fields: [userId], references: [id])
+}
+
+// ─── Webhooks ────────────────────────────────────────────────────────────────
+
+model WebhookEvent {
+  id          String        @id @default(cuid())
+  storeId     String
+  store       Store         @relation(fields: [storeId], references: [id])
+  platform    Platform
+  eventType   String
+  externalId  String?
+  payload     Json
+  status      WebhookStatus @default(PENDING)
+  error       String?
+  processedAt DateTime?
+  createdAt   DateTime      @default(now())
+}
+
+enum WebhookStatus {
+  PENDING
+  PROCESSED
+  FAILED
+  IGNORED
+}
+
+// ─── Generated Images ────────────────────────────────────────────────────────
+
+model GeneratedImage {
+  id        String   @id @default(cuid())
+  prompt    String
+  url       String
+  model     String   @default("dall-e-3")
+  size      String   @default("1024x1024")
+  style     String?
+  adId      String?
+  userId    String
+  createdAt DateTime @default(now())
+}
+
+// ─── Meta Ads Campaigns ───────────────────────────────────────────────────────
+
+model MetaAdAccount {
+  id          String   @id @default(cuid())
+  userId      String
+  accountId   String   @unique // Meta ad_account_id
+  accessToken String
+  name        String?
+  currency    String?
+  timezone    String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+}
+
+model PdfReport {
+  id        String   @id @default(cuid())
+  userId    String
+  title     String
+  type      String // dashboard, ads, finance, crm
+  fileUrl   String
+  period    String?
+  createdAt DateTime @default(now())
+}
